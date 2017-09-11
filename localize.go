@@ -17,25 +17,24 @@ import (
 )
 
 type LocalizeMap struct {
-	data    map[string]interface{}
-	varName string
+
+	// A map of interfaces, which will be type-asserted to types that will correspond to valid
+	// JavaScript primitives.
+	Data map[string]interface{}
+
+	// Determines the name of the global variable that will be assigned all the localized data.
+	// Defaults to "_globalVars". See "localize.SetVarName()" for assignment.
+	VarName string
 }
 
 // Generates a localization map.
-//
-// The data parameter is a map of interfaces, which will be type-asserted to types that will
-// correspond to valid JavaScript primitives.
-//
-// The LocalizeMap type has a "varName" field which contains the name of the global JavaScript
-// variable that will contain all the localized data. See "localize.SetVarName()" for setting this
-// variable name. By default, the variable name will be "_globalVars".
 func NewMap(data *map[string]interface{}) *LocalizeMap {
 	if nil == data {
 		data = &map[string]interface{}{}
 	}
 	return &LocalizeMap{
-		data:    *data,
-		varName: "_globalVars",
+		Data:    *data,
+		VarName: "_globalVars",
 	}
 }
 
@@ -46,13 +45,13 @@ func (l *LocalizeMap) SetVarName(name string) (*LocalizeMap, error) {
 	if "" == name {
 		return nil, errors.New("LocalizeMap.SetVarName(): The name cannot be an empty string.")
 	}
-	l.varName = name
+	l.VarName = name
 	return l, nil
 }
 
 // Adds an element with a specified key to the data map. The error is nil upon success.
 func (l *LocalizeMap) Add(key string, data interface{}) error {
-	if nil == l.data {
+	if nil == l.Data {
 		return errors.New("LocalizeMap.Add(): Cannot add element to a nil map.")
 	}
 
@@ -64,8 +63,8 @@ func (l *LocalizeMap) Add(key string, data interface{}) error {
 		return errors.New("LocalizeMap.Add(): Cannot add element with nil data.")
 	}
 
-	l.data[key] = data
-	if val, ok := l.data[key]; !ok || nil == val {
+	l.Data[key] = data
+	if val, ok := l.Data[key]; !ok || nil == val {
 		return errors.New("LocalizeMap.Add(): Failed to add element.")
 	}
 
@@ -74,7 +73,7 @@ func (l *LocalizeMap) Add(key string, data interface{}) error {
 
 // Deletes an element with a specified key from the data map. The error is nil upon success.
 func (l *LocalizeMap) Delete(key string) error {
-	if nil == l.data {
+	if nil == l.Data {
 		return errors.New("LocalizeMap.Delete(): Cannot delete element from a nil map.")
 	}
 
@@ -82,8 +81,8 @@ func (l *LocalizeMap) Delete(key string) error {
 		return errors.New("LocalizeMap.Delete(): Cannot delete element with an empty key.")
 	}
 
-	delete(l.data, key)
-	if _, ok := l.data[key]; ok {
+	delete(l.Data, key)
+	if _, ok := l.Data[key]; ok {
 		return errors.New(
 			fmt.Sprintf(
 				"LocalizeMap.Delete(): Failed to delete element with key, %v.",
@@ -97,12 +96,12 @@ func (l *LocalizeMap) Delete(key string) error {
 
 // Retrieves the localization map's data.
 func (l *LocalizeMap) GetData() map[string]interface{} {
-	return l.data
+	return l.Data
 }
 
 // Retrieves the localization map's JavaScript variable name, which will receive the localized data.
 func (l *LocalizeMap) GetVarName() string {
-	return l.varName
+	return l.VarName
 }
 
 // Gets a valid block of template.JS data that represents the fields of this LocalizeMap's "data"
@@ -112,10 +111,10 @@ func (l *LocalizeMap) JS() template.JS {
 
 	// generates a buffer that will have the JS bytes written to it, and places a global variable
 	// at the beginning for the data to be assigned to
-	buf := bytes.NewBuffer([]byte(fmt.Sprintf("%s = {\n", l.varName)))
+	buf := bytes.NewBuffer([]byte(fmt.Sprintf("%s = {\n", l.VarName)))
 
 	// fills the buffer
-	ReflectTarget(reflect.ValueOf(l.data), buf)
+	ReflectTarget(reflect.ValueOf(l.Data), buf)
 	buf.Write([]byte("\n};"))
 
 	return template.JS(buf.String())
