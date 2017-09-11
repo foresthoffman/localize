@@ -23,5 +23,4 @@ Here's an example:
         ...coming soon
     }
 */
-
 package localize
