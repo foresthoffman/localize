@@ -1,7 +1,7 @@
 /**
  * localize.go
  *
- * Copyright (c) 2017 Forest Hoffman. All Rights Reserved.
+ * Copyright (c) 2017-2019 Forest Hoffman. All Rights Reserved.
  * License: MIT License (see the included LICENSE file) or download at
  *     https://raw.githubusercontent.com/foresthoffman/localize/master/LICENSE
  */
@@ -14,120 +14,176 @@ import (
 	"fmt"
 	"html/template"
 	"reflect"
+	"regexp"
 )
 
-type LocalizeMap struct {
+var _ Localizer = &Map{}
 
-	// A map of interfaces, which will be type-asserted to types that will correspond to valid
-	// JavaScript primitives.
-	Data map[string]interface{}
+// JSVariableRegex matches a valid JavaScript variable name.
+// Variable name documentation:
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Grammar_and_types#Variables
+var JSVariableRegex = regexp.MustCompile(`^[a-zA-z_\$][a-zA-z_\$0-9]*$`)
 
-	// Determines the name of the global variable that will be assigned all the localized data.
-	// Defaults to "_globalVars". See "localize.SetVarName()" for assignment.
-	VarName string
+// JSReservedRegex matches reserved JavaScript keywords that
+// may not be used as variable names. Reserved keyword
+// documentation:
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#Keywords
+var JSReservedRegex = regexp.MustCompile(`^(break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|finally|for|function|if|import|in|instanceof|new|return|super|switch|this|throw|try|typeof|var|void|while|with|yield|enum|await|implements|interface|package|private|protected|public|static)$`)
+
+var (
+	ErrReservedKeyword     = fmt.Errorf("Reserved variable name provided")
+	ErrInvalidVariableName = fmt.Errorf("Invalid variable name provided")
+	ErrInvalidKey          = fmt.Errorf("Invalid key name provided")
+	ErrInvalidData         = fmt.Errorf("Invalid data provided")
+
+	// ErrNilMap most likely indicates that NewMap() was
+	// provided with a nil pointer.
+	ErrNilMap = fmt.Errorf("Nil data map field")
+)
+
+// Data is an alias for an interface map.
+type Data = map[string]interface{}
+
+// Localizer describes a struct that localizes Golang data.
+type Localizer interface {
+	// Data manipulation.
+	Add(key string, data interface{}) error
+	Delete(key string) error
+	GetData() Data
+
+	// Namespacing.
+	SetGlobalName(name string) error
+	GetGlobalName() string
+
+	// Localization.
+	JS() template.JS
 }
 
-// Generates a localization map.
-func NewMap(data *map[string]interface{}) *LocalizeMap {
+// Map takes a set of data, translates it to JavaScript
+// primitives, and then formats it for insertion into a global
+// browser context.
+type Map struct {
+	data       Data
+	globalName string
+}
+
+// NewMap generates a new localization map.
+func NewMap(name string, data Data) (*Map, error) {
 	if nil == data {
-		data = &map[string]interface{}{}
+		data = Data{}
 	}
-	return &LocalizeMap{
-		Data:    *data,
-		VarName: "_globalVars",
+	l := &Map{
+		data: data,
 	}
-}
-
-// Sets the localization map's JavaScript variable name, which will receive the localized data.
-// The object is returned upon success, with a nil error. Error will be non-nil when the provided
-// name is an empty string.
-func (l *LocalizeMap) SetVarName(name string) (*LocalizeMap, error) {
-	if "" == name {
-		return nil, errors.New("LocalizeMap.SetVarName(): The name cannot be an empty string.")
+	if err := l.SetGlobalName(name); nil != err {
+		return nil, err
 	}
-	l.VarName = name
 	return l, nil
 }
 
-// Adds an element with a specified key to the data map. The error is nil upon success.
-func (l *LocalizeMap) Add(key string, data interface{}) error {
-	if nil == l.Data {
-		return errors.New("LocalizeMap.Add(): Cannot add element to a nil map.")
+// Add inserts an element with the specified key to the data
+// map.
+func (l *Map) Add(key string, data interface{}) error {
+	if nil == l.data {
+		return ErrNilMap
 	}
-
 	if "" == key {
-		return errors.New("LocalizeMap.Add(): Cannot add value to an empty key.")
+		return ErrInvalidKey
 	}
-
 	if nil == data {
-		return errors.New("LocalizeMap.Add(): Cannot add element with nil data.")
+		return ErrInvalidData
 	}
 
-	l.Data[key] = data
-	if val, ok := l.Data[key]; !ok || nil == val {
-		return errors.New("LocalizeMap.Add(): Failed to add element.")
+	l.data[key] = data
+	if val, ok := l.data[key]; !ok || nil == val {
+		return errors.New("Failed to add element")
 	}
 
 	return nil
 }
 
-// Deletes an element with a specified key from the data map. The error is nil upon success.
-func (l *LocalizeMap) Delete(key string) error {
-	if nil == l.Data {
-		return errors.New("LocalizeMap.Delete(): Cannot delete element from a nil map.")
+// Delete removes an element with the specified key from the
+// data map.
+func (l *Map) Delete(key string) error {
+	if nil == l.data {
+		return ErrNilMap
 	}
-
 	if "" == key {
-		return errors.New("LocalizeMap.Delete(): Cannot delete element with an empty key.")
+		return ErrInvalidKey
 	}
 
-	delete(l.Data, key)
-	if _, ok := l.Data[key]; ok {
-		return errors.New(
-			fmt.Sprintf(
-				"LocalizeMap.Delete(): Failed to delete element with key, %v.",
-				key,
-			),
+	delete(l.data, key)
+	if _, ok := l.data[key]; ok {
+		return fmt.Errorf(
+			"Failed to delete element with key, %v",
+			key,
 		)
 	}
 
 	return nil
 }
 
-// Retrieves the localization map's data.
-func (l *LocalizeMap) GetData() map[string]interface{} {
-	return l.Data
+// GetData retrieves the localization map's data.
+func (l *Map) GetData() Data {
+	return l.data
 }
 
-// Retrieves the localization map's JavaScript variable name, which will receive the localized data.
-func (l *LocalizeMap) GetVarName() string {
-	return l.VarName
+// SetGlobalName assigns the localization map's global
+// JavaScript variable name, which will receive the localized
+// data.
+func (l *Map) SetGlobalName(name string) error {
+	var buf bytes.Buffer
+	buf.WriteString(name)
+	bytes := buf.Bytes()
+	if ok := JSVariableRegex.Match(bytes); !ok {
+		return ErrInvalidVariableName
+	}
+	if ok := JSReservedRegex.Match(bytes); ok {
+		return ErrReservedKeyword
+	}
+
+	l.globalName = name
+	return nil
 }
 
-// Gets a valid block of template.JS data that represents the fields of this LocalizeMap's "data"
-// field and all its children. The returned template.JS block can be directly placed into an
-// HTML template (provided by the "html/template" package) and output as valid JavaScript code.
-func (l *LocalizeMap) JS() template.JS {
+// GetGlobalName retrieves the localization map's global
+// JavaScript variable name.
+func (l *Map) GetGlobalName() string {
+	return l.globalName
+}
 
-	// generates a buffer that will have the JS bytes written to it, and places a global variable
-	// at the beginning for the data to be assigned to
-	buf := bytes.NewBuffer([]byte(fmt.Sprintf("%s = {\n", l.VarName)))
+// JS gets a valid block of template.JS data that represents
+// the fields of this Map's "data" field and all its
+// children. The returned template.JS block can be directly
+// placed into an HTML template (provided by the
+// "html/template" package) and output as valid JavaScript
+// code.
+func (l *Map) JS() template.JS {
+	// Generates a buffer that will have the JavaScript
+	// string-formatted bytes written to it. The head of the
+	// buffer is a global variable assignment.
+	buf := bytes.NewBuffer([]byte(fmt.Sprintf("%s = {\n", l.globalName)))
 
-	// fills the buffer
-	ReflectTarget(reflect.ValueOf(l.Data), buf)
+	// Fills the buffer.
+	ReflectTarget(reflect.ValueOf(l.data), buf)
 	buf.Write([]byte("\n};"))
 
 	return template.JS(buf.String())
 }
 
-// Takes a reflect.Value object and recursively determines the values of all the fields, sub-fields,
-// elements, etc. At each step, the target's type is analyzed to see whether or not it's an enclosing
-// type. If the target is an enclosing type, then the contents of the target will be wrapped
-// appropriately. Square-brackets ("[]") are used for translating data to a JavaScript
-// array. Curly-brackets ("{}") are used for translating data to a JavaScript object. Non-enclosing
-// types simply output according to their JavaScript equivalent.
+// ReflectTarget takes a reflect.Value object and recursively
+// determines the values of all the fields, sub-fields,
+// elements, etc. At each step, the target's type is analyzed
+// to see whether or not it's an enclosing type. If the target
+// is an enclosing type, then the contents of the target will
+// be wrapped appropriately. Square-brackets ("[]") are used
+// for translating data to a JavaScript array. Curly-brackets
+// ("{}") are used for translating data to a JavaScript object.
+// Non-enclosing types simply output according to their
+// JavaScript equivalent.
 //
-// The complete contents of the top-most target is written piece-by-piece to the buffer provided.
+// The complete contents of the top-most target is written
+// piece-by-piece to the buffer provided.
 func ReflectTarget(target reflect.Value, buf *bytes.Buffer) {
 	targetType := target.Type().Kind().String()
 	switch targetType {

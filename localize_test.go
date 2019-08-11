@@ -1,7 +1,7 @@
 /**
  * localize_test.go
  *
- * Copyright (c) 2017 Forest Hoffman. All Rights Reserved.
+ * Copyright (c) 2017-2019 Forest Hoffman. All Rights Reserved.
  * License: MIT License (see the included LICENSE file) or download at
  *     https://raw.githubusercontent.com/foresthoffman/localize/master/LICENSE
  */
@@ -13,74 +13,51 @@ import (
 	"testing"
 )
 
-// Tests that the JavaScript block returned by the localize.JS() function is as expected.
-func TestJS(t *testing.T) {
+type testCase struct {
+	data     Data
+	expected []template.JS
+}
 
-	// int case
-	intMap, err := NewMap(
-		&map[string]interface{}{
+var testCases = map[string]testCase{
+	// Int case.
+	"intCase": testCase{
+		data: Data{
 			"int": 1954,
 		},
-	).SetVarName("_localIntData")
-	if nil != err {
-		t.Fatal(err)
-	}
-
-	intJS := intMap.JS()
-	expectedintJS := template.JS(
-		`_localIntData = {
+		expected: []template.JS{template.JS(
+			`intCase = {
 "int": [
 1954,
 ],
 
 };`,
-	)
-	if expectedintJS != intJS {
-		t.Errorf(
-			"int output mismatch:\ngot\n%v\n, want\n%v\n",
-			intJS,
-			expectedintJS,
-		)
-	}
-	// int case end
-
-	// intArray case
-	intArrayMap := NewMap(
-		&map[string]interface{}{
+		)},
+	},
+	// Int array case.
+	"intArrayCase": testCase{
+		data: Data{
 			"intArray": []int{1, 2, 3, 4, 5},
 		},
-	)
-	intArrayJS := intArrayMap.JS()
-	expectedIntArrayJS := template.JS(
-		`_globalVars = {
+		expected: []template.JS{template.JS(
+			`intArrayCase = {
 "intArray": [
 [1,2,3,4,5,],
 
 ],
 
 };`,
-	)
-	if expectedIntArrayJS != intArrayJS {
-		t.Errorf(
-			"intArray output mismatch:\ngot\n%v\n, want\n%v\n",
-			intArrayJS,
-			expectedIntArrayJS,
-		)
-	}
-	// intArray case end
-
-	// arrayArray case
-	arrayArrayMap := NewMap(
-		&map[string]interface{}{
+		)},
+	},
+	// Multi-dimensional array case.
+	"multiArrayCase": testCase{
+		data: Data{
 			"arrayArray": [][]int{
 				[]int{6, 7, 8, 9, 10},
 				[]int{11, 12, 13, 14, 15},
 			},
 		},
-	)
-	arrayArrayJS := arrayArrayMap.JS()
-	expectedArrayArrayJS := template.JS(
-		`_globalVars = {
+		expected: []template.JS{template.JS(
+			`multiArrayCase = {
 "arrayArray": [
 [[6,7,8,9,10,],
 [11,12,13,14,15,],
@@ -89,28 +66,19 @@ func TestJS(t *testing.T) {
 ],
 
 };`,
-	)
-	if expectedArrayArrayJS != arrayArrayJS {
-		t.Errorf(
-			"arrayArray output mismatch:\ngot\n%v\n, want\n%v\n",
-			arrayArrayJS,
-			expectedArrayArrayJS,
-		)
-	}
-	// arrayArray case end
-
-	// assocArray case
-	assocArrayMap := NewMap(
-		&map[string]interface{}{
+		)},
+	},
+	// Map case.
+	"mapCase": testCase{
+		data: Data{
 			"assocArray": map[string]string{
 				"baz": "fubar",
 				"foo": "bar",
 			},
 		},
-	)
-	assocArrayJS := assocArrayMap.JS()
-	expectedassocArrayJSA := template.JS(
-		`_globalVars = {
+		expected: []template.JS{
+			template.JS(
+				`mapCase = {
 "assocArray": {
 "baz":"fubar",
 "foo":"bar",
@@ -118,9 +86,9 @@ func TestJS(t *testing.T) {
 },
 
 };`,
-	)
-	expectedassocArrayJSB := template.JS(
-		`_globalVars = {
+			),
+			template.JS(
+				`mapCase = {
 "assocArray": {
 "foo":"bar",
 "baz":"fubar",
@@ -128,14 +96,70 @@ func TestJS(t *testing.T) {
 },
 
 };`,
-	)
-	if expectedassocArrayJSA != assocArrayJS && expectedassocArrayJSB != assocArrayJS {
-		t.Errorf(
-			"assocArray output mismatch:\ngot\n%v\n, want\n%v, or\n%v\n",
-			assocArrayJS,
-			expectedassocArrayJSA,
-			expectedassocArrayJSB,
-		)
+			),
+		},
+	},
+}
+var maps = make(map[string]*Map)
+
+// TestNewMap insures that the data maps can be instantiated as
+// expected.
+func TestNewMap(t *testing.T) {
+	for name, tCase := range testCases {
+		m, err := NewMap(name, tCase.data)
+		if nil != err {
+			t.Fatalf("Failed to create new map (%q), err: %v\n", name, err)
+		}
+		maps[name] = m
 	}
-	// assocArray case end
+}
+
+// TestJS insures that the localized data is formatted as
+// expected.
+func TestJS(t *testing.T) {
+	for name, m := range maps {
+		output := m.JS()
+
+		matched := false
+		for _, expected := range testCases[name].expected {
+			if expected == output {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			t.Fatalf("Expected one of: %q, got: %q\n", testCases[name].expected, output)
+		}
+	}
+}
+
+// TestInvalidVariableName insures that invalid variable names
+// cannot be assigned to the localized data.
+func TestInvalidVariableName(t *testing.T) {
+	invalidCases := map[string]testCase{
+		"2var": testCase{data: Data{}},
+		"-var": testCase{data: Data{}},
+		"*var": testCase{data: Data{}},
+	}
+	for name, tCase := range invalidCases {
+		if _, err := NewMap(name, tCase.data); ErrInvalidVariableName != err {
+			t.Fatalf("Expected err: %v, got: %v\n", ErrInvalidVariableName, err)
+		}
+	}
+}
+
+// TestReservedVariableName insures that reserved variable
+// names cannot be assigned to the localized data.
+func TestReservedVariableName(t *testing.T) {
+	reservedCases := map[string]testCase{
+		"var":      testCase{data: Data{}},
+		"function": testCase{data: Data{}},
+		"await":    testCase{data: Data{}},
+		"import":   testCase{data: Data{}},
+	}
+	for name, tCase := range reservedCases {
+		if _, err := NewMap(name, tCase.data); ErrReservedKeyword != err {
+			t.Fatalf("Expected err: %v, got: %v\n", ErrReservedKeyword, err)
+		}
+	}
 }
