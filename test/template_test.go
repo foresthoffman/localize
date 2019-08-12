@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-// TestTemplate insures that implementations of localize work
+// TestTemplate ensures that implementations of localize work
 // as expected with the html.template package.
 func TestTemplate(t *testing.T) {
 	port := 3000

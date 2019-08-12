@@ -104,7 +104,7 @@ var testCases = map[string]testCase{
 }
 var maps = make(map[string]*localize.Map)
 
-// TestNewMap insures that the data maps can be instantiated as
+// TestNewMap ensures that the data maps can be instantiated as
 // expected.
 func TestNewMap(t *testing.T) {
 	for name, tCase := range testCases {
@@ -116,7 +116,7 @@ func TestNewMap(t *testing.T) {
 	}
 }
 
-// TestJS insures that the localized data is formatted as
+// TestJS ensures that the localized data is formatted as
 // expected.
 func TestJS(t *testing.T) {
 	for name, m := range maps {
@@ -135,7 +135,7 @@ func TestJS(t *testing.T) {
 	}
 }
 
-// TestInvalidVariableName insures that invalid variable names
+// TestInvalidVariableName ensures that invalid variable names
 // cannot be assigned to the localized data.
 func TestInvalidVariableName(t *testing.T) {
 	invalidCases := map[string]testCase{
@@ -150,7 +150,7 @@ func TestInvalidVariableName(t *testing.T) {
 	}
 }
 
-// TestReservedVariableName insures that reserved variable
+// TestReservedVariableName ensures that reserved variable
 // names cannot be assigned to the localized data.
 func TestReservedVariableName(t *testing.T) {
 	reservedCases := map[string]testCase{
