@@ -16,17 +16,17 @@ import (
 )
 
 type testCase struct {
-	data     localize.Data
-	expected []template.JS
+	Input    localize.Data
+	Expected []template.JS
 }
 
 var testCases = map[string]testCase{
 	// Int case.
 	"intCase": testCase{
-		data: localize.Data{
+		Input: localize.Data{
 			"int": 1954,
 		},
-		expected: []template.JS{template.JS(
+		Expected: []template.JS{template.JS(
 			`intCase = {
 "int": [
 1954,
@@ -37,10 +37,10 @@ var testCases = map[string]testCase{
 	},
 	// Int array case.
 	"intArrayCase": testCase{
-		data: localize.Data{
+		Input: localize.Data{
 			"intArray": []int{1, 2, 3, 4, 5},
 		},
-		expected: []template.JS{template.JS(
+		Expected: []template.JS{template.JS(
 			`intArrayCase = {
 "intArray": [
 [1,2,3,4,5,],
@@ -52,13 +52,13 @@ var testCases = map[string]testCase{
 	},
 	// Multi-dimensional array case.
 	"multiArrayCase": testCase{
-		data: localize.Data{
+		Input: localize.Data{
 			"arrayArray": [][]int{
 				[]int{6, 7, 8, 9, 10},
 				[]int{11, 12, 13, 14, 15},
 			},
 		},
-		expected: []template.JS{template.JS(
+		Expected: []template.JS{template.JS(
 			`multiArrayCase = {
 "arrayArray": [
 [[6,7,8,9,10,],
@@ -72,13 +72,13 @@ var testCases = map[string]testCase{
 	},
 	// Map case.
 	"mapCase": testCase{
-		data: localize.Data{
+		Input: localize.Data{
 			"assocArray": map[string]string{
 				"baz": "fubar",
 				"foo": "bar",
 			},
 		},
-		expected: []template.JS{
+		Expected: []template.JS{
 			template.JS(
 				`mapCase = {
 "assocArray": {
@@ -108,9 +108,11 @@ var maps = make(map[string]*localize.Map)
 // expected.
 func TestNewMap(t *testing.T) {
 	for name, tCase := range testCases {
-		m, err := localize.NewMap(name, tCase.data)
+		m, err := localize.NewMap(name, tCase.Input)
 		if nil != err {
-			t.Fatalf("Failed to create new map for case, %q,\nerr: %v\n", name, err)
+			t.Run(name, func(t *testing.T) {
+				t.Errorf("Failed to create new map,\nerr: %v\n", err)
+			})
 		}
 		maps[name] = m
 	}
@@ -123,14 +125,16 @@ func TestJS(t *testing.T) {
 		output := m.JS()
 
 		matched := false
-		for _, expected := range testCases[name].expected {
+		for _, expected := range testCases[name].Expected {
 			if expected == output {
 				matched = true
 				break
 			}
 		}
 		if !matched {
-			t.Fatalf("Expected one of: %v,\ngot: %q\n", testCases[name].expected, output)
+			t.Run(name, func(t *testing.T) {
+				t.Errorf("Expected one of: %v,\ngot: %q\n", testCases[name].Expected, output)
+			})
 		}
 	}
 }
@@ -139,13 +143,15 @@ func TestJS(t *testing.T) {
 // cannot be assigned to the localized data.
 func TestInvalidVariableName(t *testing.T) {
 	invalidCases := map[string]testCase{
-		"2var": testCase{data: localize.Data{}},
-		"-var": testCase{data: localize.Data{}},
-		"*var": testCase{data: localize.Data{}},
+		"2var": testCase{Input: localize.Data{}},
+		"-var": testCase{Input: localize.Data{}},
+		"*var": testCase{Input: localize.Data{}},
 	}
 	for name, tCase := range invalidCases {
-		if _, err := localize.NewMap(name, tCase.data); localize.ErrInvalidVariableName != err {
-			t.Fatalf("Expected err: %v,\ngot: %v\n", localize.ErrInvalidVariableName, err)
+		if _, err := localize.NewMap(name, tCase.Input); localize.ErrInvalidVariableName != err {
+			t.Run(name, func(t *testing.T) {
+				t.Errorf("Expected err: %v,\ngot: %v\n", localize.ErrInvalidVariableName, err)
+			})
 		}
 	}
 }
@@ -154,14 +160,16 @@ func TestInvalidVariableName(t *testing.T) {
 // names cannot be assigned to the localized data.
 func TestReservedVariableName(t *testing.T) {
 	reservedCases := map[string]testCase{
-		"var":      testCase{data: localize.Data{}},
-		"function": testCase{data: localize.Data{}},
-		"await":    testCase{data: localize.Data{}},
-		"import":   testCase{data: localize.Data{}},
+		"var":      testCase{Input: localize.Data{}},
+		"function": testCase{Input: localize.Data{}},
+		"await":    testCase{Input: localize.Data{}},
+		"import":   testCase{Input: localize.Data{}},
 	}
 	for name, tCase := range reservedCases {
-		if _, err := localize.NewMap(name, tCase.data); localize.ErrReservedKeyword != err {
-			t.Fatalf("Expected err: %v,\ngot: %v\n", localize.ErrReservedKeyword, err)
+		if _, err := localize.NewMap(name, tCase.Input); localize.ErrReservedKeyword != err {
+			t.Run(name, func(t *testing.T) {
+				t.Errorf("Expected err: %v,\ngot: %v\n", localize.ErrReservedKeyword, err)
+			})
 		}
 	}
 }
